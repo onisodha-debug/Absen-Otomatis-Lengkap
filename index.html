@@ -408,25 +408,13 @@
     }
 
     // ==========================================
-    // PROSES HASIL SCAN (DENGAN KAMERA TUTUP/MATI SEMENTARA OTOMATIS)
+    // PROSES HASIL SCAN (STABIL, CEPAT, KAMERA TETAP MENYALA DENGAN JEDA COOLDOWN)
     // ==========================================
     async function processScanResult(decodedText, jenisScan) {
       if (!isScanningReady) return;
-      isScanningReady = false; 
+      isScanningReady = false; // Kunci sementara agar tidak scan beruntun
 
-      const scannerInstance = (jenisScan === 'pagi') ? html5QrCodeScanner : html5QrCodeDhuhur;
-      const readerElementId = (jenisScan === 'pagi') ? 'reader' : 'reader-dhuhur';
       const statusEl = document.getElementById(jenisScan === 'pagi' ? 'scan-result' : 'scan-dhuhur-result');
-
-      // 1. MATIKAN / TUTUP KAMERA SEKETIKA SAAT BERHASIL TER-SCAN
-      if (scannerInstance) {
-        try {
-          await scannerInstance.stop();
-        } catch (e) {
-          console.log("Stop camera note:", e);
-        }
-      }
-      document.getElementById(readerElementId).style.display = 'none';
 
       const cleanText = decodedText.toString().trim().toLowerCase();
       const siswa = dataSiswa.find(s => {
@@ -438,12 +426,7 @@
       if (!siswa) {
         statusEl.innerText = `QR Code tidak dikenali: "${decodedText}"`;
         statusEl.style.color = "#ef4444";
-        
-        // Nyalakan kembali kamera setelah 2 detik jika QR tidak dikenal
-        setTimeout(() => {
-          toggleScanner(jenisScan, true);
-          isScanningReady = true;
-        }, 2000);
+        setTimeout(() => { isScanningReady = true; }, 1500);
         return;
       }
 
@@ -505,11 +488,12 @@
         }
       }
 
-      // 2. TUNGGU 4 DETIK (KAMERA TERTUTUP & PETUGAS BISA MELIHAT NOTIFIKASI), KEMUDIAN NYALAKAN LAGI OTOMATIS
+      // Jeda 3 detik agar petugas bisa melihat teks notifikasi hijau/kuning dengan jelas sebelum siswa berikutnya scan
       setTimeout(() => {
-        toggleScanner(jenisScan, true);
         isScanningReady = true;
-      }, 4000);
+        statusEl.innerText = "Kamera aktif. Silakan siswa berikutnya...";
+        statusEl.style.color = "var(--cyan-neon)";
+      }, 3000);
     }
 
     function playBeepSound() {
