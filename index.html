@@ -145,6 +145,11 @@
       <div class="glass-card no-print">
         <div class="section-title">Scan QR Code Kartu Siswa (Kamera Piket Pagi)</div>
         <div class="flex-gap" style="margin-bottom: 12px;">
+          <!-- Pilihan Kamera Depan / Belakang -->
+          <select id="camera-select-pagi" class="form-select" style="max-width: 170px;" onchange="changeCamera('pagi')">
+            <option value="environment">Kamera Belakang</option>
+            <option value="user">Kamera Depan</option>
+          </select>
           <button id="btn-start-scan" class="btn-class active" onclick="toggleScanner('pagi', true)">Nyalakan Kamera</button>
           <button id="btn-stop-scan" class="btn-class" onclick="toggleScanner('pagi', false)" style="background:#ef4444; border-color:#ef4444; color:#fff;">Matikan Kamera</button>
         </div>
@@ -171,6 +176,11 @@
       <div class="glass-card no-print">
         <div class="section-title">Scan QR Code Sholat Dhuhur (Kamera Pengawas)</div>
         <div class="flex-gap" style="margin-bottom: 12px;">
+          <!-- Pilihan Kamera Depan / Belakang Dhuhur -->
+          <select id="camera-select-dhuhur" class="form-select" style="max-width: 170px;" onchange="changeCamera('dhuhur')">
+            <option value="environment">Kamera Belakang</option>
+            <option value="user">Kamera Depan</option>
+          </select>
           <button id="btn-start-dhuhur" class="btn-class active" onclick="toggleScanner('dhuhur', true)">Nyalakan Kamera Dhuhur</button>
           <button id="btn-stop-dhuhur" class="btn-class" onclick="toggleScanner('dhuhur', false)" style="background:#ef4444; border-color:#ef4444; color:#fff;">Matikan Kamera Dhuhur</button>
         </div>
@@ -302,6 +312,7 @@
         .then(data => { dataSiswa = data; })
         .catch(err => console.error("Gagal memuat data siswa:", err));
     });
+
     function switchTab(viewId, btn) {
       if (isPagiScanning && html5QrCodeScanner) {
         toggleScanner('pagi', false);
@@ -319,12 +330,13 @@
     }
     
     // ==========================================
-    // KONTROL NYALA / MATI KAMERA MANUAL
+    // KONTROL NYALA / MATI KAMERA (DENGAN PILIHAN KAMERA DEPAN/BELAKANG)
     // ==========================================
     function toggleScanner(tipe, nyalakan) {
       if (tipe === 'pagi') {
         const readerEl = document.getElementById('reader');
         const statusEl = document.getElementById('scan-result');
+        const facingVal = document.getElementById('camera-select-pagi') ? document.getElementById('camera-select-pagi').value : "environment";
         
         if (nyalakan) {
           readerEl.style.display = 'block';
@@ -335,7 +347,7 @@
           }
           
           html5QrCodeScanner.start(
-            { facingMode: "environment" }, 
+            { facingMode: facingVal }, 
             { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => { processScanResult(decodedText, 'pagi'); }
           ).then(() => {
@@ -366,6 +378,7 @@
       } else if (tipe === 'dhuhur') {
         const readerEl = document.getElementById('reader-dhuhur');
         const statusEl = document.getElementById('scan-dhuhur-result');
+        const facingVal = document.getElementById('camera-select-dhuhur') ? document.getElementById('camera-select-dhuhur').value : "environment";
         
         if (nyalakan) {
           readerEl.style.display = 'block';
@@ -376,7 +389,7 @@
           }
           
           html5QrCodeDhuhur.start(
-            { facingMode: "environment" }, 
+            { facingMode: facingVal }, 
             { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => { processScanResult(decodedText, 'dhuhur'); }
           ).then(() => {
@@ -407,12 +420,22 @@
       }
     }
 
+    function changeCamera(tipe) {
+      if (tipe === 'pagi' && isPagiScanning) {
+        toggleScanner('pagi', false);
+        setTimeout(() => { toggleScanner('pagi', true); }, 400);
+      } else if (tipe === 'dhuhur' && isDhuhurScanning) {
+        toggleScanner('dhuhur', false);
+        setTimeout(() => { toggleScanner('dhuhur', true); }, 400);
+      }
+    }
+
     // ==========================================
-    // PROSES HASIL SCAN (STABIL, CEPAT, KAMERA TETAP MENYALA DENGAN JEDA COOLDOWN)
+    // PROSES HASIL SCAN (STABIL & NOTIFIKASI SPESIFIK)
     // ==========================================
     async function processScanResult(decodedText, jenisScan) {
       if (!isScanningReady) return;
-      isScanningReady = false; // Kunci sementara agar tidak scan beruntun
+      isScanningReady = false; 
 
       const statusEl = document.getElementById(jenisScan === 'pagi' ? 'scan-result' : 'scan-dhuhur-result');
 
@@ -488,7 +511,7 @@
         }
       }
 
-      // Jeda 3 detik agar petugas bisa melihat teks notifikasi hijau/kuning dengan jelas sebelum siswa berikutnya scan
+      // Jeda cooldown 3 detik agar petugas bisa melihat teks notifikasi dengan jelas
       setTimeout(() => {
         isScanningReady = true;
         statusEl.innerText = "Kamera aktif. Silakan siswa berikutnya...";
@@ -529,6 +552,7 @@
         body: JSON.stringify({ action: "absenDhuhur", kelas: kelasTarget, nama: nama, noWa: String(noWa), status: statusVal, tanggal: tanggalStr, jam: jamStr })
       }).then(() => { renderDaftarDhuhurSiswa(kelasTarget, true); });
     }
+
     // ==========================================
     // RENDER MANUAL PRESENSI & DHUHUR
     // ==========================================
@@ -690,6 +714,7 @@
         body: JSON.stringify({ action: "absenDhuhur", kelas: currentDhuhurClass, nama: nama, noWa: String(noWa), status: statusVal, tanggal: tanggalStr, jam: jamStr })
       }).then(() => { renderDaftarDhuhurSiswa(currentDhuhurClass, true); });
     }
+
     // ==========================================
     // UTILS & REKAP
     // ==========================================
