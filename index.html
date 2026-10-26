@@ -294,8 +294,6 @@
     let html5QrCodeDhuhur = null;
     let isPagiScanning = false;
     let isDhuhurScanning = false;
-    
-    // Flag pembatas cooldown agar kamera tidak scan dobel/terus-menerus
     let isScanningReady = true;
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -319,6 +317,7 @@
       if (viewId !== 'input-view' && autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
       if (viewId !== 'dhuhur-view' && autoRefreshDhuhurTimer) { clearInterval(autoRefreshDhuhurTimer); autoRefreshDhuhurTimer = null; }
     }
+    
     // ==========================================
     // KONTROL NYALA / MATI KAMERA MANUAL
     // ==========================================
@@ -407,13 +406,27 @@
         }
       }
     }
+
     // ==========================================
-    // PROSES HASIL SCAN QR CODE (DENGAN COOLDOWN & NOTIFIKASI SPESIFIK)
+    // PROSES HASIL SCAN (DENGAN KAMERA TUTUP/MATI SEMENTARA OTOMATIS)
     // ==========================================
     async function processScanResult(decodedText, jenisScan) {
-      // Jika masih dalam jeda cooldown, abaikan scan berikutnya sementara waktu
       if (!isScanningReady) return;
       isScanningReady = false; 
+
+      const scannerInstance = (jenisScan === 'pagi') ? html5QrCodeScanner : html5QrCodeDhuhur;
+      const readerElementId = (jenisScan === 'pagi') ? 'reader' : 'reader-dhuhur';
+      const statusEl = document.getElementById(jenisScan === 'pagi' ? 'scan-result' : 'scan-dhuhur-result');
+
+      // 1. MATIKAN / TUTUP KAMERA SEKETIKA SAAT BERHASIL TER-SCAN
+      if (scannerInstance) {
+        try {
+          await scannerInstance.stop();
+        } catch (e) {
+          console.log("Stop camera note:", e);
+        }
+      }
+      document.getElementById(readerElementId).style.display = 'none';
 
       const cleanText = decodedText.toString().trim().toLowerCase();
       const siswa = dataSiswa.find(s => {
@@ -422,13 +435,15 @@
         return nisnOrId === cleanText || comboKey === cleanText;
       });
 
-      const statusEl = document.getElementById(jenisScan === 'pagi' ? 'scan-result' : 'scan-dhuhur-result');
-
       if (!siswa) {
         statusEl.innerText = `QR Code tidak dikenali: "${decodedText}"`;
         statusEl.style.color = "#ef4444";
-        // Buka kembali cooldown setelah 2 detik jika QR tidak dikenal
-        setTimeout(() => { isScanningReady = true; }, 2000);
+        
+        // Nyalakan kembali kamera setelah 2 detik jika QR tidak dikenal
+        setTimeout(() => {
+          toggleScanner(jenisScan, true);
+          isScanningReady = true;
+        }, 2000);
         return;
       }
 
@@ -442,7 +457,6 @@
         document.getElementById('class-title').innerText = `Daftar Siswa Kelas ${kelas.toUpperCase()}`;
         renderDaftarSiswa(kelas);
 
-        // Cek dulu ke Google Sheets apakah sudah absen hari ini
         try {
           const res = await fetch(`${SCRIPT_URL}?action=getPresensiHariIni`);
           const presensiHariIni = await res.json();
@@ -450,18 +464,15 @@
           const dataAbsen = presensiHariIni[keyMap] || { pagi: "", pulang: "" };
 
           if (dataAbsen.pagi) {
-            // Sudah absen
             statusEl.innerText = `Anda Sudah Absen Hari Ini: ${nama}`;
-            statusEl.style.color = "#f59e0b"; // Warna kuning/oranye peringatan
+            statusEl.style.color = "#f59e0b"; // Kuning peringatan
           } else {
-            // Belum absen, proses simpan
             prosesAbsenOtomatisScan(nama, noWa, kelas);
             statusEl.innerText = `Presensi BERHASIL: ${nama}`;
-            statusEl.style.color = "#10b981"; // Warna hijau sukses
+            statusEl.style.color = "#10b981"; // Hijau sukses
           }
         } catch (e) {
           console.error(e);
-          // Fallback jika fetch error
           prosesAbsenOtomatisScan(nama, noWa, kelas);
           statusEl.innerText = `Presensi BERHASIL: ${nama}`;
           statusEl.style.color = "#10b981";
@@ -472,7 +483,6 @@
         document.getElementById('dhuhur-class-title').innerText = `Daftar Siswa Sholat Dhuhur Kelas ${kelas.toUpperCase()}`;
         renderDaftarDhuhurSiswa(kelas);
 
-        // Cek dhuhur hari ini
         try {
           const res = await fetch(`${SCRIPT_URL}?action=getDhuhurHariIni`);
           const presensiDhuhurHariIni = await res.json();
@@ -480,11 +490,9 @@
           const statusDhuhur = presensiDhuhurHariIni[keyMap] || "";
 
           if (statusDhuhur) {
-            // Sudah absen dhuhur
             statusEl.innerText = `Anda Sudah Absen Hari Ini: ${nama}`;
             statusEl.style.color = "#f59e0b";
           } else {
-            // Belum absen dhuhur
             prosesAbsenDhuhurOtomatisScan(nama, noWa, kelas);
             statusEl.innerText = `Presensi BERHASIL: ${nama} (Dhuhur)`;
             statusEl.style.color = "#10b981";
@@ -497,8 +505,9 @@
         }
       }
 
-      // Jeda waktu (Cooldown) kamera selama 4 detik sebelum siswa berikutnya bisa scan
+      // 2. TUNGGU 4 DETIK (KAMERA TERTUTUP & PETUGAS BISA MELIHAT NOTIFIKASI), KEMUDIAN NYALAKAN LAGI OTOMATIS
       setTimeout(() => {
+        toggleScanner(jenisScan, true);
         isScanningReady = true;
       }, 4000);
     }
